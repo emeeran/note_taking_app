@@ -1,75 +1,76 @@
-import tkinter as tk
 import sqlite3
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
 
-class Database:
-    def __init__(self, db_name):
-        self.conn = sqlite3.connect(db_name)
-        self.c = self.conn.cursor()
-        self.create_table()
+# Connect to SQLite database
+conn = sqlite3.connect('notes.db')
+c = conn.cursor()
 
-    def create_table(self):
-        self.c.execute('''DROP TABLE IF EXISTS sessions''')
-        self.c.execute('''CREATE TABLE sessions (title TEXT, content TEXT)''')
-        self.conn.commit()
+# Create table if it doesn't exist
+c.execute('''CREATE TABLE IF NOT EXISTS notes
+             (title text, content text)''')
 
+def save_note():
+    title = title_entry.get()
+    content = text_area.get("1.0", "end-1c")
+    if title:
+        c.execute("INSERT INTO notes VALUES (?,?)", (title, content))
+        conn.commit()
+        load_titles()
+        messagebox.showinfo("Saved", "Your note is saved successfully.")
+    else:
+        messagebox.showerror("Title Needed", "Please enter a title for your note.")
 
-    def execute(self, query, params=()):
-        self.c.execute(query, params)
-        self.conn.commit()
+def load_note(event):
+    title = title_listbox.get(title_listbox.curselection())
+    c.execute("SELECT content FROM notes WHERE title=?", (title,))
+    content = c.fetchone()[0]
+    text_area.delete("1.0", "end")
+    text_area.insert("1.0", content)
 
-    def fetchall(self, query, params=()):
-        self.c.execute(query, params)
-        return self.c.fetchall()
+def delete_note():
+    title = title_listbox.get(title_listbox.curselection())
+    if title:
+        c.execute("DELETE FROM notes WHERE title=?", (title,))
+        conn.commit()
+        load_titles()
+        messagebox.showinfo("Deleted", "Your note is deleted successfully.")
+    else:
+        messagebox.showerror("No Selection", "Please select a note to delete.")
 
-    def close(self):
-        self.conn.close()
+def load_titles():
+    c.execute("SELECT title FROM notes")
+    titles = c.fetchall()
+    title_listbox.delete(0, "end")
+    for title in titles:
+        title_listbox.insert("end", title[0])
 
-class Application(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.db = Database('database.db')
-        self.create_widgets()
+root = tk.Tk()
 
-    def create_widgets(self):
-        self.input_text = tk.Text(self)
-        self.input_text.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+title_label = tk.Label(root, text="Title:")
+title_label.pack(side="left")
+title_entry = tk.Entry(root)
+title_entry.pack(side="left")
 
-        button_frame = tk.Frame(self)
-        button_frame.pack(side=tk.LEFT, fill=tk.Y)
+text_area = scrolledtext.ScrolledText(root)
+text_area.pack()
 
-        self.create_button(button_frame, "Save", self.save_input)
-        self.create_button(button_frame, "Scroll", self.scroll_sessions)
+button_frame = tk.Frame(root)
+button_frame.pack(side="left")
 
-        scrollbar = tk.Scrollbar(self, command=self.input_text.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.input_text.config(yscrollcommand=scrollbar.set)
+save_button = tk.Button(button_frame, text="Save", command=save_note)
+save_button.pack(side="left")
 
-    def create_button(self, frame, text, command):
-        button = tk.Button(frame, text=text, command=command)
-        button.pack(fill=tk.X)
+delete_button = tk.Button(button_frame, text="Delete", command=delete_note)
+delete_button.pack(side="left")
 
-    def save_input(self):
-        input_data = self.input_text.get("1.0", tk.END).strip()
-        if input_data:
-            self.db.execute("INSERT INTO sessions (title, content) VALUES (?, ?)", (input_data, input_data))
-            self.input_text.delete("1.0", tk.END)
+exit_button = tk.Button(button_frame, text="Exit", command=root.quit)
+exit_button.pack(side="left")
 
-    def scroll_sessions(self):
-        self.input_text.delete("1.0", tk.END)
-        rows = self.db.fetchall("SELECT title FROM sessions")
-        for row in rows:
-            self.input_text.insert(tk.END, row[0] + '\n')
-            self.input_text.tag_bind(row[0], "<Button-1>", lambda event, title=row[0]: self.show_content(title))
+title_listbox = tk.Listbox(root)
+title_listbox.pack(side="right")
+title_listbox.bind('<<ListboxSelect>>', load_note)
 
-    def show_content(self, title):
-        content = self.db.fetchall("SELECT content FROM sessions WHERE title=?", (title,))
-        if content:
-            self.input_text.delete("1.0", tk.END)
-            self.input_text.insert(tk.END, content[0][0])
+load_titles()
 
-    def __del__(self):
-        self.db.close()
-
-if __name__ == "__main__":
-    app = Application()
-    app.mainloop()
+root.mainloop()
