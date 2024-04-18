@@ -11,7 +11,6 @@ class Database:
         self.c.execute('''CREATE TABLE IF NOT EXISTS sessions (input TEXT)''')
         self.conn.commit()
 
-
     def execute(self, query, params=()):
         self.c.execute(query, params)
         self.conn.commit()
@@ -37,9 +36,8 @@ class Application(tk.Tk):
         button_frame.pack(side=tk.LEFT, fill=tk.Y)
 
         self.create_button(button_frame, "Save", self.save_input)
-        self.create_button(button_frame, "Delete", self.delete_input)
-        self.create_button(button_frame, "Scroll Up", self.scroll_up_sessions)
-        self.create_button(button_frame, "Scroll Down", self.scroll_down_sessions)
+        self.create_button(button_frame, "Delete", lambda: self.delete_input())
+        self.create_button(button_frame, "Scroll", self.scroll_sessions)
 
         scrollbar = tk.Scrollbar(self, command=self.input_text.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -56,21 +54,21 @@ class Application(tk.Tk):
             self.input_text.delete("1.0", tk.END)
 
     def delete_input(self):
-        selected_input = self.input_text.get(tk.ACTIVE)
-        if selected_input:
-            self.db.execute("DELETE FROM sessions WHERE input=?", (selected_input,))
-            self.input_text.delete(tk.ACTIVE)
+        if self.input_text.tag_ranges("sel"):
+            start_index = self.input_text.index("sel.first")
+            end_index = self.input_text.index("sel.last")
+            selected_input = self.input_text.get(start_index, end_index)
+            if selected_input:
+                self.db.execute("DELETE FROM sessions WHERE input=?", (selected_input,))
+                self.input_text.delete(start_index, end_index)
 
-    def scroll_up_sessions(self):
+
+    def scroll_sessions(self):
         self.input_text.delete("1.0", tk.END)
         rows = self.db.fetchall("SELECT input FROM sessions")
         for row in rows:
             self.input_text.insert(tk.END, row[0] + '\n')
-    def scroll_down_sessions(self):
-        self.input_text.delete("1.0", tk.END)
-        rows = self.db.fetchall("SELECT input FROM sessions")
-        for row in rows:
-            self.input_text.insert(tk.END, row[0] + '\n')
+
     def __del__(self):
         self.db.close()
 
