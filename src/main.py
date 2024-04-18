@@ -8,8 +8,10 @@ class Database:
         self.create_table()
 
     def create_table(self):
-        self.c.execute('''CREATE TABLE IF NOT EXISTS sessions (input TEXT)''')
+        self.c.execute('''DROP TABLE IF EXISTS sessions''')
+        self.c.execute('''CREATE TABLE sessions (title TEXT, content TEXT)''')
         self.conn.commit()
+
 
     def execute(self, query, params=()):
         self.c.execute(query, params)
@@ -36,7 +38,6 @@ class Application(tk.Tk):
         button_frame.pack(side=tk.LEFT, fill=tk.Y)
 
         self.create_button(button_frame, "Save", self.save_input)
-        self.create_button(button_frame, "Delete", lambda: self.delete_input())
         self.create_button(button_frame, "Scroll", self.scroll_sessions)
 
         scrollbar = tk.Scrollbar(self, command=self.input_text.yview)
@@ -50,24 +51,21 @@ class Application(tk.Tk):
     def save_input(self):
         input_data = self.input_text.get("1.0", tk.END).strip()
         if input_data:
-            self.db.execute("INSERT INTO sessions (input) VALUES (?)", (input_data,))
+            self.db.execute("INSERT INTO sessions (title, content) VALUES (?, ?)", (input_data, input_data))
             self.input_text.delete("1.0", tk.END)
-
-    def delete_input(self):
-        if self.input_text.tag_ranges("sel"):
-            start_index = self.input_text.index("sel.first")
-            end_index = self.input_text.index("sel.last")
-            selected_input = self.input_text.get(start_index, end_index)
-            if selected_input:
-                self.db.execute("DELETE FROM sessions WHERE input=?", (selected_input,))
-                self.input_text.delete(start_index, end_index)
-
 
     def scroll_sessions(self):
         self.input_text.delete("1.0", tk.END)
-        rows = self.db.fetchall("SELECT input FROM sessions")
+        rows = self.db.fetchall("SELECT title FROM sessions")
         for row in rows:
             self.input_text.insert(tk.END, row[0] + '\n')
+            self.input_text.tag_bind(row[0], "<Button-1>", lambda event, title=row[0]: self.show_content(title))
+
+    def show_content(self, title):
+        content = self.db.fetchall("SELECT content FROM sessions WHERE title=?", (title,))
+        if content:
+            self.input_text.delete("1.0", tk.END)
+            self.input_text.insert(tk.END, content[0][0])
 
     def __del__(self):
         self.db.close()
