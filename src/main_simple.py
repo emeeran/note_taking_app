@@ -1,119 +1,106 @@
-import sqlite3
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, simpledialog
+import tkinter.scrolledtext as scrolledtext
+import tkinter.simpledialog as simpledialog
+import sqlite3
 
-class NotesDB:
-    def __init__(self, db_name):
-        self.db_name = db_name
-        self.conn = sqlite3.connect(self.db_name)
-        self.conn.execute('''CREATE TABLE IF NOT EXISTS notes
-                             (title text, content text)''')
-        self.conn.commit()
+class TextEditorApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Text Editor")
+        self.master.geometry("800x600")
 
-    def __enter__(self):
-        return self
+        self.create_widgets()
+        self.load_titles()
+        self.selected_title = None
+        self.is_list_shown = False
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.conn.close()
+    def create_widgets(self):
+        # Text editor
+        self.text_box = scrolledtext.ScrolledText(self.master, wrap=tk.WORD)
+        self.text_box.grid(row=0, column=0, columnspan=2, sticky="nsew")
 
-    def save_note(self, title, content):
-        self.conn.execute("INSERT INTO notes VALUES (?,?)", (title, content))
-        self.conn.commit()
+        # Button frame
+        self.button_frame = tk.Frame(self.master)
+        self.button_frame.grid(row=1, column=0, sticky="w")
 
-    def load_note_content(self, title):
-        cursor = self.conn.execute("SELECT content FROM notes WHERE title=?", (title,))
-        return cursor.fetchone()[0]
+        # Title list frame (hidden by default)
+        self.title_frame = tk.Frame(self.master)
+        self.title_frame.grid(row=0, column=1, rowspan=2, sticky="nsew")
 
-    def update_note_content(self, title, content):
-        self.conn.execute("UPDATE notes SET content=? WHERE title=?", (content, title))
-        self.conn.commit()
+        # Title listbox (scrollable)
+        self.title_scrollbar = tk.Scrollbar(self.title_frame, orient=tk.VERTICAL)
+        self.title_listbox = tk.Listbox(self.title_frame, width=30, yscrollcommand=self.title_scrollbar.set)
+        self.title_scrollbar.config(command=self.title_listbox.yview)
+        self.title_listbox.grid(row=0, column=0, sticky="nsew")
+        self.title_scrollbar.grid(row=0, column=1, sticky="ns")
 
-    def delete_note(self, title):
-        self.conn.execute("DELETE FROM notes WHERE title=?", (title,))
-        self.conn.commit()
+        # Button configurations
+        button_configs = [
+            ("New", self.new_text),
+            ("Update", self.update_text),
+            ("Save", self.save_text),
+            ("Delete", self.delete_text),
+            ("List", self.toggle_list),
+            ("Close", self.master.destroy)
+        ]
+
+        # Create buttons
+        for text, command in button_configs:
+            button = tk.Button(self.button_frame, text=text, command=command, width=10, height=2)
+            button.pack(side="left", padx=5, pady=5)
 
     def load_titles(self):
-        cursor = self.conn.execute("SELECT title FROM notes")
-        return cursor.fetchall()
-
-class NotesApp:
-    def __init__(self, root):
-        self.db = NotesDB('notes.db')
-        self.root = root
-        self.setup_ui()
-
-    def setup_ui(self):
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(side="left")
-
-        save_button = tk.Button(button_frame, text="Save", command=self.save_note, width=10, height=2)
-        save_button.pack(side="top")
-
-        update_button = tk.Button(button_frame, text="Update", command=self.update_note, width=10, height=2)
-        update_button.pack(side="top")
-
-        delete_button = tk.Button(button_frame, text="Delete", command=self.delete_note, width=10, height=2)
-        delete_button.pack(side="top")
-
-        new_button = tk.Button(button_frame, text="New", command=self.new_note, width=10, height=2)
-        new_button.pack(side="top")
-
-        close_button = tk.Button(button_frame, text="Close", command=self.root.quit, width=10, height=2)
-        close_button.pack(side="top")
-
-        self.title_listbox = tk.Listbox(self.root)
-        self.title_listbox.pack(side="left", fill="both", expand=True)
-        self.title_listbox.bind('<<ListboxSelect>>', self.load_note)
-        self.title_listbox.grid_remove()
-
-        self.text_area = scrolledtext.ScrolledText(self.root)
-        self.text_area.pack(side="right", fill="both", expand=True)
-
-        self.load_titles()
-
-    def save_note(self):
-        title = simpledialog.askstring("Input", "Enter session title:")
-        if title:
-            content = self.text_area.get("1.0", "end-1c")
-            self.db.save_note(title, content)
-            self.load_titles()
-            messagebox.showinfo("Saved", "Your note is saved successfully.")
-        else:
-            messagebox.showerror("Title Needed", "Please enter a title for your note.")
-
-    def load_note(self, event):
-        title = self.title_listbox.get(self.title_listbox.curselection())
-        content = self.db.load_note_content(title)
-        self.text_area.delete("1.0", "end")
-        self.text_area.insert("1.0", content)
-
-    def update_note(self):
-        title = self.title_listbox.get(self.title_listbox.curselection())
-        content = self.text_area.get("1.0", "end-1c")
-        self.db.update_note_content(title, content)
-        self.load_titles()
-        messagebox.showinfo("Updated", "Your note is updated successfully.")
-
-    def delete_note(self):
-        title = self.title_listbox.get(self.title_listbox.curselection())
-        if title:
-            self.db.delete_note(title)
-            self.load_titles()
-            messagebox.showinfo("Deleted", "Your note is deleted successfully.")
-        else:
-            messagebox.showerror("No Selection", "Please select a note to delete.")
-
-    def new_note(self):
-        self.text_area.delete("1.0", "end")
-        self.title_listbox.grid()
-
-    def load_titles(self):
-        titles = self.db.load_titles()
-        self.title_listbox.delete(0, "end")
+        conn = sqlite3.connect('text_editor.db')
+        c = conn.cursor()
+        c.execute("SELECT title FROM texts")
+        titles = c.fetchall()
+        conn.close()
         for title in titles:
-            self.title_listbox.insert("end", title[0])
+            self.selected_title = title[0]
+            self.title_listbox.insert(tk.END, title[0])
+
+    def new_text(self):
+        self.text_box.delete(1.0, tk.END)
+
+    def update_text(self):
+        pass
+
+    def save_text(self):
+        title = simpledialog.askstring("Title", "Enter title:")
+        content = self.text_box.get(1.0, tk.END)
+        conn = sqlite3.connect('text_editor.db')
+        c = conn.cursor()
+        c.execute("INSERT INTO texts (title, content) VALUES (?, ?)", (title, content))
+        conn.commit()
+        conn.close()
+        self.title_listbox.insert(tk.END, title)
+
+    def delete_text(self):
+        selected_title = self.title_listbox.get(tk.ACTIVE)
+        conn = sqlite3.connect('text_editor.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM texts WHERE title=?", (selected_title,))
+        conn.commit()
+        conn.close()
+        self.title_listbox.delete(tk.ACTIVE)
+
+    def toggle_list(self):
+        if self.is_list_shown:
+            self.title_frame.grid_forget()
+            self.is_list_shown = False
+        else:
+            self.title_frame.grid(row=0, column=1, rowspan=2, sticky="nsew")
+            self.is_list_shown = True
+
+def create_database():
+    conn = sqlite3.connect('text_editor.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS texts (title TEXT, content TEXT)''')
+    conn.commit()
+    conn.close()
 
 if __name__ == "__main__":
+    create_database()
     root = tk.Tk()
-    app = NotesApp(root)
+    app = TextEditorApp(root)
     root.mainloop()

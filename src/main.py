@@ -10,13 +10,13 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS notes
              (title text, content text)''')
 
-def save_note():
-    title = title_entry.get()
-    content = text_area.get("1.0", "end-1c")
+def save_note(self):
+    title = self.title_entry.get()
+    content = self.text_area.get("1.0", "end-1c")
     if title:
         c.execute("INSERT INTO notes VALUES (?,?)", (title, content))
         conn.commit()
-        load_titles()
+        self.load_titles()
         messagebox.showinfo("Saved", "Your note is saved successfully.")
     else:
         messagebox.showerror("Title Needed", "Please enter a title for your note.")
