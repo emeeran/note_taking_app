@@ -1,76 +1,143 @@
-import sqlite3
 import tkinter as tk
-from tkinter import messagebox, scrolledtext
+import tkinter.scrolledtext as scrolledtext
+import tkinter.simpledialog as simpledialog
+import tkinter.messagebox as messagebox
+import sqlite3
 
-# Connect to SQLite database
-conn = sqlite3.connect('notes.db')
-c = conn.cursor()
+class NoteTakingApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Note Taking App")
+        self.master.geometry("800x600")
 
-# Create table if it doesn't exist
-c.execute('''CREATE TABLE IF NOT EXISTS notes
-             (title text, content text)''')
-
-def save_note(self):
-    title = self.title_entry.get()
-    content = self.text_area.get("1.0", "end-1c")
-    if title:
-        c.execute("INSERT INTO notes VALUES (?,?)", (title, content))
-        conn.commit()
+        self.create_widgets()
         self.load_titles()
-        messagebox.showinfo("Saved", "Your note is saved successfully.")
-    else:
-        messagebox.showerror("Title Needed", "Please enter a title for your note.")
 
-def load_note(event):
-    title = title_listbox.get(title_listbox.curselection())
-    c.execute("SELECT content FROM notes WHERE title=?", (title,))
-    content = c.fetchone()[0]
-    text_area.delete("1.0", "end")
-    text_area.insert("1.0", content)
+    def create_widgets(self):
+        self.button_frame = tk.Frame(self.master, width=200)
+        self.button_frame.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
-def delete_note():
-    title = title_listbox.get(title_listbox.curselection())
-    if title:
-        c.execute("DELETE FROM notes WHERE title=?", (title,))
-        conn.commit()
-        load_titles()
-        messagebox.showinfo("Deleted", "Your note is deleted successfully.")
-    else:
-        messagebox.showerror("No Selection", "Please select a note to delete.")
+        self.text_box = scrolledtext.ScrolledText(self.master, wrap=tk.WORD, width=60, height=60)
+        self.text_box.grid(row=0, column=1, rowspan=3, sticky="nsew")
 
-def load_titles():
-    c.execute("SELECT title FROM notes")
-    titles = c.fetchall()
-    title_listbox.delete(0, "end")
-    for title in titles:
-        title_listbox.insert("end", title[0])
+        self.title_frame = tk.Frame(self.master)
+        self.title_frame.grid(row=0, column=2, rowspan=3, sticky="nsew")
 
-root = tk.Tk()
+        self.title_scrollbar = tk.Scrollbar(self.title_frame, orient=tk.VERTICAL)
+        self.title_listbox = tk.Listbox(self.title_frame, width=60, yscrollcommand=self.title_scrollbar.set)
+        self.title_listbox.grid(row=0, column=0, sticky="nsew")
+        self.title_scrollbar.config(command=self.title_listbox.yview)
+        self.title_scrollbar.grid(row=0, column=1, sticky="ns")
 
-title_label = tk.Label(root, text="Title:")
-title_label.pack(side="left")
-title_entry = tk.Entry(root)
-title_entry.pack(side="left")
+        button_configs = [
+            ("New", self.new_note),
+            ("Update", self.update_note),
+            ("Save", self.save_note),
+            ("Delete", self.delete_note),
+            ("List Hide", self.toggle_list),
+            ("Exit", self.master.destroy),
 
-text_area = scrolledtext.ScrolledText(root)
-text_area.pack()
+        ]
 
-button_frame = tk.Frame(root)
-button_frame.pack(side="left")
+        for row, (text, command) in enumerate(button_configs):
+            button = tk.Button(self.button_frame, text=text, command=command, width=12, height=2)
+            button.grid(row=row, column=0, padx=5, pady=5, sticky="nsew")
 
-save_button = tk.Button(button_frame, text="Save", command=save_note)
-save_button.pack(side="left")
+        self.selected_title = None
+        self.is_list_shown = True
 
-delete_button = tk.Button(button_frame, text="Delete", command=delete_note)
-delete_button.pack(side="left")
+        self.title_listbox.bind("<ButtonRelease-1>", self.display_selected_note)  # Bind click event to display content
 
-exit_button = tk.Button(button_frame, text="Exit", command=root.quit)
-exit_button.pack(side="left")
+    def load_titles(self):
+        conn = sqlite3.connect('notes.db')
+        c = conn.cursor()
+        c.execute("SELECT title FROM notes")
+        titles = c.fetchall()
+        conn.close()
+        self.title_listbox.delete(0, tk.END)  # Clear existing titles
+        for title in titles:
+            self.title_listbox.insert(tk.END, title[0])
 
-title_listbox = tk.Listbox(root)
-title_listbox.pack(side="right")
-title_listbox.bind('<<ListboxSelect>>', load_note)
+    def display_selected_note(self, event):
+        selected_index = self.title_listbox.curselection()
+        if selected_index:
+            self.selected_title = self.title_listbox.get(selected_index)  # Store the selected title
+            conn = sqlite3.connect('notes.db')
+            c = conn.cursor()
+            c.execute("SELECT content FROM notes WHERE title=?", (self.selected_title,))
+            content = c.fetchone()
+            conn.close()
+            if content:
+                self.text_box.delete(1.0, tk.END)
+                self.text_box.insert(tk.END, content[0])
+            else:
+                self.text_box.delete(1.0, tk.END)
+                self.text_box.insert(tk.END, "No content available for this title.")
 
-load_titles()
+    def update_note(self):
+        if self.selected_title:
+            content = self.text_box.get(1.0, tk.END)
+            conn = sqlite3.connect('notes.db')
+            c = conn.cursor()
+            c.execute("UPDATE notes SET content=? WHERE title=?", (content, self.selected_title))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Update", f"Note '{self.selected_title}' updated successfully")
+        else:
+            messagebox.showerror("Error", "No title selected. Please select a title.")
+    def new_note(self):
+        self.text_box.delete(1.0, tk.END)
+        self.selected_title = None
 
-root.mainloop()
+
+
+    def save_note(self):
+        title = simpledialog.askstring("New Note", "Enter a title for the new note")
+        if title:
+            content = self.text_box.get(1.0, tk.END)
+            conn = sqlite3.connect('notes.db')
+            c = conn.cursor()
+            c.execute("INSERT INTO notes (title, content) VALUES (?, ?)", (title, content))
+            conn.commit()
+            conn.close()
+            self.load_titles()  # Reload titles after saving
+            self.selected_title = title  # Set the new title as the selected title
+        else:
+            messagebox.showwarning("Warning", "Please enter a title for the new note.")
+
+    def delete_note(self):
+        selected_index = self.title_listbox.curselection()
+        if selected_index:
+            title_to_delete = self.title_listbox.get(selected_index)
+            confirmation = messagebox.askyesno("Delete", f"Are you sure you want to delete the note '{title_to_delete}'?")
+            if confirmation:
+                conn = sqlite3.connect('notes.db')
+                c = conn.cursor()
+                c.execute("DELETE FROM notes WHERE title=?", (title_to_delete,))
+                conn.commit()
+                conn.close()
+                self.load_titles()  # Reload titles after deletion
+                self.text_box.delete(1.0, tk.END)  # Clear text box after deletion
+        else:
+            messagebox.showerror("Error", "Please select a title to delete")
+
+    def toggle_list(self):
+        if self.is_list_shown:
+            self.title_frame.grid_remove()
+            self.is_list_shown = False
+        else:
+            self.title_frame.grid()
+            self.is_list_shown = True
+
+def create_database():
+    conn = sqlite3.connect('notes.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS notes (title TEXT, content TEXT)''')
+    conn.commit()
+    conn.close()
+
+if __name__ == "__main__":
+    create_database()
+    root = tk.Tk()
+    app = NoteTakingApp(root)  # Instantiate NoteTakingApp
+    root.mainloop()  # Start the Tkinter event loop
